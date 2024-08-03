@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from pyasn1.error import PyAsn1Error
@@ -233,6 +234,12 @@ class SnmpSwitch(SwitchEntity):
         except PyAsn1Error:
             self._payload_on_int = None
 
+        self._payload_on_regex: str | None
+        try:
+            self._payload_on_regex = re.compile(payload_on)
+        except re.error:
+            self._payload_on_regex = None
+
         try:
             self._payload_on = OctetString(payload_on)
         except PyAsn1Error:
@@ -242,6 +249,12 @@ class SnmpSwitch(SwitchEntity):
             self._payload_off_int = Integer(payload_off)
         except PyAsn1Error:
             self._payload_off_int = None
+
+        self._payload_off_regex: str | None
+        try:
+            self._payload_off_regex = re.compile(payload_off)
+        except re.error:
+            self._payload_off_regex = None
 
         try:
             self._payload_off = OctetString(payload_off)
@@ -289,17 +302,27 @@ class SnmpSwitch(SwitchEntity):
         else:
             for resrow in restable:
                 if (
-                    self._payload_on is not None and resrow[-1] == self._payload_on
-                ) or (
-                    self._payload_on_int is not None
-                    and resrow[-1] == self._payload_on_int
+                    (self._payload_on is not None and resrow[-1] == self._payload_on)
+                    or (
+                        self._payload_on_int is not None
+                        and resrow[-1] == self._payload_on_int
+                    )
+                    or (
+                        self._payload_on_regex is not None
+                        and self._payload_on_regex.match(str(resrow[-1]))
+                    )
                 ):
                     self._state = True
                 elif (
-                    self._payload_off is not None and resrow[-1] == self._payload_off
-                ) or (
-                    self._payload_off_int is not None
-                    and resrow[-1] == self._payload_off_int
+                    (self._payload_off is not None and resrow[-1] == self._payload_off)
+                    or (
+                        self._payload_off_int is not None
+                        and resrow[-1] == self._payload_off_int
+                    )
+                    or (
+                        self._payload_off_regex is not None
+                        and self._payload_off_regex.match(str(resrow[-1]))
+                    )
                 ):
                     self._state = False
                 else:

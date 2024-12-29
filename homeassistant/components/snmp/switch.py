@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fnmatch import fnmatch
 import logging
 from typing import Any
 
@@ -219,7 +220,6 @@ class SnmpSwitch(SwitchEntity):
 
         self._attr_name = name
         self._baseoid = baseoid
-        self._vartype = vartype
 
         # Set the command OID to the base OID if command OID is unset
         self._commandoid = commandoid or baseoid
@@ -228,25 +228,37 @@ class SnmpSwitch(SwitchEntity):
 
         self._state: bool | None = None
 
-        try:
-            self._payload_on_int = Integer(payload_on)
-        except PyAsn1Error:
-            self._payload_on_int = None
+        if vartype != "none":
+            if vartype not in MAP_SNMP_VARTYPES:
+                raise ValueError(f"SNMP error: unknown vartype {vartype}")
 
-        try:
-            self._payload_on = OctetString(payload_on)
-        except PyAsn1Error:
-            self._payload_on = None
+            # if vartype is set, verify it by casting payload_on, payload_off, command_payload_on, command_payload_off
+            self._payload_on = locals()[vartype](payload_on)
+            self._payload_off = locals()[vartype](payload_off)
+            self._command_payload_on = locals()[vartype](
+                command_payload_on or payload_on
+            )
+            self._command_payload_off = locals()[vartype](
+                command_payload_off or payload_off
+            )
+            self._vartype = vartype
 
-        try:
-            self._payload_off_int = Integer(payload_off)
-        except PyAsn1Error:
-            self._payload_off_int = None
-
-        try:
-            self._payload_off = OctetString(payload_off)
-        except PyAsn1Error:
-            self._payload_off = None
+        else:
+            # if vartype is not set, try falling back to Integer first and then OctetString
+            try:
+                self._payload_on = Integer(payload_on)
+                self._payload_off = Integer(payload_off)
+                self._command_payload_on = Integer(command_payload_on or payload_on)
+                self._command_payload_off = Integer(command_payload_off or payload_off)
+                self._vartype = "Integer"
+            except PyAsn1Error:
+                self._payload_on = OctetString(payload_on)
+                self._payload_off = OctetString(payload_off)
+                self._command_payload_on = OctetString(command_payload_on or payload_on)
+                self._command_payload_off = OctetString(
+                    command_payload_off or payload_off
+                )
+                self._vartype = "OctetString"
 
         self._target = UdpTransportTarget((host, port))
         self._request_args = request_args
@@ -288,18 +300,14 @@ class SnmpSwitch(SwitchEntity):
             )
         else:
             for resrow in restable:
-                if (
-                    self._payload_on is not None and resrow[-1] == self._payload_on
-                ) or (
-                    self._payload_on_int is not None
-                    and resrow[-1] == self._payload_on_int
+                if (self._payload_on == resrow[-1]) or (
+                    self._vartype == "OctetString"
+                    and fnmatch(str(resrow[-1]), str(self._payload_on))
                 ):
                     self._state = True
-                elif (
-                    self._payload_off is not None and resrow[-1] == self._payload_off
-                ) or (
-                    self._payload_off_int is not None
-                    and resrow[-1] == self._payload_off_int
+                elif (self._payload_off == resrow[-1]) or (
+                    self._vartype == "OctetString"
+                    and fnmatch(str(resrow[-1]), str(self._payload_off))
                 ):
                     self._state = False
                 else:

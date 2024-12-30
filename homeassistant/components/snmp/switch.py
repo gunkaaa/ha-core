@@ -233,12 +233,12 @@ class SnmpSwitch(SwitchEntity):
                 raise ValueError(f"SNMP error: unknown vartype {vartype}")
 
             # if vartype is set, verify it by casting payload_on, payload_off, command_payload_on, command_payload_off
-            self._payload_on = locals()[vartype](payload_on)
-            self._payload_off = locals()[vartype](payload_off)
-            self._command_payload_on = locals()[vartype](
+            self._payload_on = globals()[vartype](payload_on)
+            self._payload_off = globals()[vartype](payload_off)
+            self._command_payload_on = globals()[vartype](
                 command_payload_on or payload_on
             )
-            self._command_payload_off = locals()[vartype](
+            self._command_payload_off = globals()[vartype](
                 command_payload_off or payload_off
             )
             self._vartype = vartype
